@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cde-drug-sft-pipeline"
+version = "0.1.0"
+description = "Chinese drug leaflet data-to-SFT pipeline based on public CDE records"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "accelerate>=0.34",
+  "beautifulsoup4>=4.12",
+  "bitsandbytes>=0.43",
+  "datasets>=2.20",
+  "lxml>=5.2",
+  "pandas>=2.2",
+  "peft>=0.12",
+  "pdfplumber>=0.11",
+  "pydantic>=2.7",
+  "pypdf>=4.2",
+  "pyyaml>=6.0",
+  "requests>=2.32",
+  "sentencepiece>=0.2",
+  "tqdm>=4.66",
+  "transformers>=4.44",
+  "typer>=0.12"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.1",
+  "ruff>=0.4"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
