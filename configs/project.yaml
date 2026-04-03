@@ -1,0 +1,26 @@
+project_name: cde-drug-sft-pipeline
+source: cde
+sample_limit: 500
+dosage_forms:
+  - 片剂
+  - 胶囊
+  - 颗粒
+priority_fields:
+  - otc_or_rx_flag
+  - indications
+  - dosage_and_administration
+optional_fields:
+  - adverse_reactions
+split_policy: by_document
+training:
+  base_model_family: qwen
+  expected_model_size: 4b_to_9b
+  method: lora_or_dora
+  framework:
+    - pytorch
+    - transformers
+    - datasets
+    - peft
+notes:
+  - "处方药可通过说明书中的提示语辅助识别"
+  - "V0 不追求覆盖所有字段"
