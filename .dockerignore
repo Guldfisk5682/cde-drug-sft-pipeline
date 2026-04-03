@@ -1,0 +1,7 @@
+.git
+.venv
+__pycache__
+data/raw/pdfs
+data/interim/text
+data/interim/parsed
+data/processed/qa
