@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.DS_Store
+.cache/
+
+data/raw/pdfs/
+data/interim/text/
+data/interim/parsed/
+data/processed/qa/
+
+*.log
