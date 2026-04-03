@@ -6,9 +6,10 @@ __pycache__/
 .DS_Store
 .cache/
 
-data/raw/pdfs/
-data/interim/text/
-data/interim/parsed/
-data/processed/qa/
+data/pdf/*
+!data/pdf/.gitkeep
+scripts/data/*.json
+scripts/data/*.tsv
+scripts/data/*.log
 
 *.log

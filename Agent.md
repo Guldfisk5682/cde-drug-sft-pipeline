@@ -67,16 +67,15 @@ Candidate next fields:
 
 ## Proposed Data Flow
 
-1. Query or parse CDE catalog records
-2. Filter records by dosage form and attachment availability
-3. Save metadata into a raw catalog table
-4. Download leaflet PDFs
-5. Extract PDF text
-6. Segment text into target sections
-7. Normalize high-priority fields
-8. Build field-grounded QA pairs
-9. Export train/validation/test-ready JSONL
-10. Launch downstream SFT experiments
+1. Capture CDE list/detail manifests in a real browser session
+2. Export manifest JSON files into `scripts/data/`
+3. Download leaflet PDFs into `data/pdf/`
+4. Extract PDF text
+5. Segment text into target sections
+6. Normalize high-priority fields
+7. Build field-grounded QA pairs
+8. Export train/validation/test-ready JSONL
+9. Launch downstream SFT experiments
 
 ## Data Schema
 
@@ -90,12 +89,11 @@ Each raw document should eventually map into a record like:
   "spec": "0.25g",
   "otc_or_rx_flag": "RX",
   "pdf_url": "https://...",
-  "pdf_path": "data/raw/pdfs/cde-000001.pdf",
+  "pdf_path": "data/pdf/cde-000001.pdf",
   "source_url": "https://...",
   "indications": "...",
   "dosage_and_administration": "...",
-  "adverse_reactions": "...",
-  "raw_text_path": "data/interim/text/cde-000001.txt"
+  "adverse_reactions": "..."
 }
 ```
 
@@ -130,21 +128,19 @@ The training stage is intentionally simple compared with the data work:
 
 ## Repository Conventions
 
-- `data/raw/`: untouched catalog files and original PDFs
-- `data/interim/`: extracted text and intermediate parse artifacts
-- `data/processed/`: normalized document JSONL and QA datasets
+- `data/pdf/`: original leaflet PDFs
 - `configs/`: sampling and runtime configs
-- `scripts/`: runnable entrypoints
+- `scripts/`: userscript, shell downloader, and exported manifest JSON files
 - `src/`: reusable Python package code
 - `docs/`: notes, decisions, and benchmark drafts
 
 ## Immediate Next Steps
 
-1. Implement CDE catalog ingestion for the target dosage forms
-2. Confirm how leaflet attachment URLs are exposed in CDE pages
-3. Build PDF downloader with retry and metadata logging
-4. Prototype section extraction on `20-30` leaflets
-5. Lock the first normalized schema before QA generation
+1. Download the first full batch of leaflet PDFs with the browser-assisted manifest flow
+2. Prototype section extraction on `20-30` leaflets
+3. Lock the first normalized schema before QA generation
+4. Build the cleaning pipeline for `用法用量` and `适应症`
+5. Start QA construction and downstream SFT prep
 
 ## Working Principle
 
