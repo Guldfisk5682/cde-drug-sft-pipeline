@@ -10,7 +10,7 @@ Student-scale end-to-end project for building a Chinese drug leaflet QA dataset 
   - `用法用量`
   - `适应症`
   - `处方/非处方标识`
-  - `不良反应` as an optional field in V0
+  - `禁忌/警告`
 - Training stack:
   - `PyTorch`
   - `Transformers`
@@ -31,12 +31,6 @@ Open the project shell inside the container:
 docker compose run --rm app bash
 ```
 
-Install editable dependencies inside the container if needed:
-
-```bash
-pip install -e .
-```
-
 Check the PyTorch and CUDA runtime inside the container:
 
 ```bash
@@ -48,18 +42,63 @@ python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 1. Use the browser-side userscript to capture CDE detail-page attachment manifests
 2. Save exported session JSON files under `scripts/data/`
 3. Run the shell downloader to fetch original leaflet PDFs into `data/pdf/`
-4. Extract and clean text
-5. Build normalized document records
-6. Generate QA pairs
-7. Export JSONL for SFT
+4. Extract first-pass fields from PDFs
+5. Clean extracted fields into normalized document records
+6. Generate QA pairs from cleaned records
+7. Split JSONL into train/test sets
 8. Run LoRA or DoRA fine-tuning
 
 ## Repository Layout
 
 - `data/pdf/`: raw leaflet PDF downloads
+- `data/interim/`: optional intermediate parsing artifacts
+- `data/processed/`: cleaned document-level records
+- `data/dataset/`: QA datasets and split outputs
 - `scripts/cde_leaflet_helper.user.js`: browser-side CDE helper script
 - `scripts/download_leaflets.sh`: batch PDF downloader
 - `scripts/data/`: exported browser session JSON manifests
+
+## Staged Pipeline
+
+The current local-first pipeline is intentionally explicit:
+
+1. `extract_fields`
+   - input: raw PDFs under `data/pdf/<batch>/`
+   - output: `data/processed/leaflet_fields.jsonl`
+2. `clean_records`
+   - input: extracted field JSONL
+   - output: `data/processed/leaflet_records.clean.jsonl`
+3. `build_qa`
+   - input: cleaned document records
+   - output: `data/dataset/qa_dataset.jsonl`
+4. `split_dataset`
+   - input: QA dataset
+   - output: `data/dataset/{train,test}.jsonl`
+
+Example commands:
+
+```bash
+python scripts/extract_leaflet_fields.py \
+  --pdf-dir data/pdf/20260404T151727Z \
+  --output-path data/processed/leaflet_fields.sample.jsonl \
+  --limit 20
+
+python scripts/clean_leaflet_records.py \
+  --input-path data/processed/leaflet_fields.sample.jsonl \
+  --output-path data/processed/leaflet_records.clean.sample.jsonl
+
+python scripts/build_qa_dataset.py \
+  --input-path data/processed/leaflet_records.clean.sample.jsonl \
+  --output-path data/dataset/qa_dataset.sample.jsonl
+
+python scripts/split_qa_dataset.py \
+  --input-path data/dataset/qa_dataset.sample.jsonl \
+  --output-dir data/dataset/sample_split
+```
+
+Training uses `configs/train.yaml` by default. The current config keeps `bf16`
+enabled and leaves `test.jsonl` out of online evaluation so the held-out test
+split is not consumed during training.
 
 ## Browser-Assisted Collection
 

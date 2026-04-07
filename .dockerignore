@@ -1,7 +1,9 @@
 .git
 .venv
-__pycache__
-data/raw/pdfs
-data/interim/text
-data/interim/parsed
-data/processed/qa
+__pycache__/
+**/__pycache__/
+.cache/
+outputs/
+data/
+scripts/data/
+*.log

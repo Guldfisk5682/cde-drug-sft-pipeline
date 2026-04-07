@@ -1,15 +1,17 @@
 .venv/
 __pycache__/
+**/__pycache__/
 *.pyc
 .pytest_cache/
 .mypy_cache/
 .DS_Store
 .cache/
+outputs/
 
-data/pdf/*
-!data/pdf/.gitkeep
-scripts/data/*.json
-scripts/data/*.tsv
-scripts/data/*.log
+Agent.md
+docs/
+data/
+scripts/data/
+scripts/cde_leaflet_helper.user.js
 
 *.log

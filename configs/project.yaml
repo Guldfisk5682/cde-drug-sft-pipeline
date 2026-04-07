@@ -9,9 +9,17 @@ priority_fields:
   - otc_or_rx_flag
   - indications
   - dosage_and_administration
-optional_fields:
-  - adverse_reactions
-split_policy: by_document
+  - contraindications
+optional_fields: []
+split_policy: qa_split_hint
+pipeline_stages:
+  - extract_fields
+  - clean_records
+  - build_qa
+  - split_dataset
+dataset_split:
+  train_ratio: 0.9
+  val_ratio: 0.0
 training:
   base_model_family: qwen
   expected_model_size: 4b_to_9b
@@ -23,4 +31,6 @@ training:
     - peft
 notes:
   - "处方药可通过说明书中的提示语辅助识别"
-  - "V0 不追求覆盖所有字段"
+  - "【禁忌】与【警告】统一映射到 contraindications"
+  - "V0 不追求覆盖所有字段，但要求四个核心字段可稳定抽取"
+  - "当前主数据集采用 train/test，两者由 QA 模板 split_hint 区分"
