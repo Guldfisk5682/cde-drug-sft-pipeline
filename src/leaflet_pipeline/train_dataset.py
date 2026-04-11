@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import inspect
 from pathlib import Path
 from typing import Any
 
@@ -55,14 +54,6 @@ class QwenSFTCollator:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         self.tokenizer.padding_side = "right"
 
-        signature = inspect.signature(self.processor.apply_chat_template)
-        self._supports_enable_thinking = "enable_thinking" in signature.parameters
-        if not self._supports_enable_thinking:
-            raise RuntimeError(
-                "Current processor.apply_chat_template does not support enable_thinking. "
-                "Please use a transformers version that supports Qwen3.5 thinking-mode control."
-            )
-
     @staticmethod
     def _normalize_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         normalized: list[dict[str, Any]] = []
@@ -74,12 +65,18 @@ class QwenSFTCollator:
         return normalized
 
     def _render_chat(self, messages: list[dict[str, Any]], *, add_generation_prompt: bool) -> str:
-        return self.processor.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=add_generation_prompt,
-            enable_thinking=self.enable_thinking,
-        )
+        try:
+            return self.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=add_generation_prompt,
+                enable_thinking=self.enable_thinking,
+            )
+        except TypeError as exc:
+            raise RuntimeError(
+                "Current tokenizer.apply_chat_template does not accept enable_thinking. "
+                "Please verify the installed transformers version and the Qwen chat template."
+            ) from exc
 
     def __call__(self, features: list[dict[str, Any]]) -> dict[str, torch.Tensor]:
         if torch is None:
