@@ -50,14 +50,27 @@ def choose_torch_dtype(dtype_name: str) -> torch.dtype:
 
 
 def build_bnb_config(config: dict[str, Any], torch_dtype: torch.dtype) -> BitsAndBytesConfig | None:
-    if not config.get("load_in_4bit", False):
-        return None
-    return BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type=config.get("bnb_4bit_quant_type", "nf4"),
-        bnb_4bit_use_double_quant=config.get("bnb_4bit_use_double_quant", True),
-        bnb_4bit_compute_dtype=torch_dtype,
-    )
+    load_in_4bit = bool(config.get("load_in_4bit", False))
+    load_in_8bit = bool(config.get("load_in_8bit", False))
+    if load_in_4bit and load_in_8bit:
+        raise ValueError("Only one of load_in_4bit/load_in_8bit can be enabled.")
+    if load_in_4bit:
+        return BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type=config.get("bnb_4bit_quant_type", "nf4"),
+            bnb_4bit_use_double_quant=config.get("bnb_4bit_use_double_quant", True),
+            bnb_4bit_compute_dtype=torch_dtype,
+        )
+    if load_in_8bit:
+        return BitsAndBytesConfig(load_in_8bit=True)
+    return None
+
+
+def resolve_device_map(device_map_value: Any) -> Any:
+    if isinstance(device_map_value, str) and device_map_value.startswith("cuda:"):
+        device_index = int(device_map_value.split(":", 1)[1])
+        return {"": device_index}
+    return device_map_value
 
 
 @app.command()
@@ -71,13 +84,26 @@ def main(
     ),
 ) -> None:
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+    print(f"[train] loading config from {config_path}", flush=True)
     config = load_config(config_path)
 
     torch_dtype = choose_torch_dtype(config.get("torch_dtype", "bfloat16"))
     quantization_config = build_bnb_config(config, torch_dtype)
-    device_map = config.get("device_map", "auto")
+    device_map = resolve_device_map(config.get("device_map", "auto"))
+    print(
+        "[train] config summary: "
+        f"base_model={config['base_model']}, "
+        f"torch_dtype={torch_dtype}, "
+        f"load_in_4bit={config.get('load_in_4bit', False)}, "
+        f"load_in_8bit={config.get('load_in_8bit', False)}, "
+        f"device_map={device_map}",
+        flush=True,
+    )
 
+    print("[train] loading processor...", flush=True)
     processor = AutoProcessor.from_pretrained(config["base_model"], trust_remote_code=True)
+    print("[train] processor loaded", flush=True)
+    print("[train] loading model...", flush=True)
     model = AutoModelForImageTextToText.from_pretrained(
         config["base_model"],
         torch_dtype=torch_dtype,
@@ -85,17 +111,21 @@ def main(
         quantization_config=quantization_config,
         device_map=device_map,
     )
+    print("[train] model loaded", flush=True)
 
     if config.get("gradient_checkpointing", True):
+        print("[train] enabling gradient checkpointing...", flush=True)
         model.gradient_checkpointing_enable()
         model.config.use_cache = False
         if hasattr(model, "enable_input_require_grads"):
             model.enable_input_require_grads()
     if quantization_config is not None:
+        print("[train] preparing k-bit training...", flush=True)
         model = prepare_model_for_kbit_training(
             model,
             use_gradient_checkpointing=config.get("gradient_checkpointing", True),
         )
+        print("[train] k-bit preparation done", flush=True)
 
     peft_config = LoraConfig(
         r=config.get("lora_r", 8),
@@ -106,27 +136,41 @@ def main(
         task_type=TaskType.CAUSAL_LM,
         use_dora=True,
     )
+    print("[train] wrapping model with DoRA/PEFT...", flush=True)
     model = get_peft_model(model, peft_config)
+    print("[train] PEFT model ready", flush=True)
     model.print_trainable_parameters()
 
+    print("[train] loading train dataset...", flush=True)
     train_dataset = JsonlQADataset(resolve_path(config["train_dataset_path"]))
     eval_dataset_path = config.get("eval_dataset_path")
+    print(f"[train] train dataset size: {len(train_dataset)}", flush=True)
+    print("[train] loading eval dataset...", flush=True)
     eval_dataset = JsonlQADataset(resolve_path(eval_dataset_path)) if eval_dataset_path else None
+    if eval_dataset is None:
+        print("[train] eval dataset disabled", flush=True)
+    else:
+        print(f"[train] eval dataset size: {len(eval_dataset)}", flush=True)
 
+    print("[train] building collator...", flush=True)
     collator = QwenSFTCollator(
         processor,
         max_length=config.get("max_seq_length", 1024),
         enable_thinking=bool(config.get("enable_thinking", False)),
     )
+    print("[train] collator ready", flush=True)
 
     output_dir = resolve_path(config["output_dir"])
     output_dir.mkdir(parents=True, exist_ok=True)
+    print(f"[train] output dir: {output_dir}", flush=True)
 
+    print("[train] building TrainingArguments...", flush=True)
     training_args = TrainingArguments(
         output_dir=str(output_dir),
         per_device_train_batch_size=config.get("per_device_train_batch_size", 1),
         per_device_eval_batch_size=config.get("per_device_eval_batch_size", 1),
         gradient_accumulation_steps=config.get("gradient_accumulation_steps", 8),
+        eval_accumulation_steps=config.get("eval_accumulation_steps",8),
         learning_rate=float(config.get("learning_rate", 2e-4)),
         num_train_epochs=float(config.get("num_train_epochs", 1)),
         warmup_ratio=float(config.get("warmup_ratio", 0.03)),
@@ -135,21 +179,23 @@ def main(
         optim=config.get("optim", "paged_adamw_8bit"),
         bf16=torch_dtype == torch.bfloat16,
         fp16=torch_dtype == torch.float16,
-        logging_steps=config.get("logging_steps", 10),
-        save_steps=config.get("save_steps", 200),
-        eval_steps=config.get("eval_steps", 200),
+        logging_steps=config.get("logging_steps", 20),
+        save_steps=config.get("save_steps", 100),
+        eval_steps=config.get("eval_steps", 100),
         save_total_limit=config.get("save_total_limit", 2),
         gradient_checkpointing=config.get("gradient_checkpointing", True),
         remove_unused_columns=False,
-        dataloader_num_workers=config.get("dataloader_num_workers", 2),
-        report_to=config.get("report_to", "none"),
+        dataloader_num_workers=config.get("dataloader_num_workers", 8),
+        report_to=config.get("report_to", "tensorboard"),
         save_strategy="steps",
-        evaluation_strategy="steps" if eval_dataset is not None else "no",
+        eval_strategy="steps" if eval_dataset is not None else "no",
         load_best_model_at_end=eval_dataset is not None,
         metric_for_best_model="eval_loss" if eval_dataset is not None else None,
         greater_is_better=False if eval_dataset is not None else None,
     )
+    print("[train] TrainingArguments ready", flush=True)
 
+    print("[train] building Trainer...", flush=True)
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -157,9 +203,13 @@ def main(
         eval_dataset=eval_dataset,
         data_collator=collator,
     )
+    print("[train] Trainer ready", flush=True)
 
+    print("[train] start training...", flush=True)
     trainer.train()
+    print("[train] training finished, saving final checkpoint...", flush=True)
     trainer.save_model(str(output_dir / "final"))
+    print("[train] final checkpoint saved", flush=True)
 
 
 if __name__ == "__main__":

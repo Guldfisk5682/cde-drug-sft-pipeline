@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -18,8 +19,10 @@ from leaflet_pipeline.pipeline_schema import QASample
 
 class JsonlQADataset(Dataset):
     def __init__(self, path: str | Path):
+        started_at = time.perf_counter()
         self.path = Path(path)
         self.samples: list[dict[str, Any]] = []
+        print(f"[dataset] loading {self.path}", flush=True)
         with self.path.open("r", encoding="utf-8") as fh:
             for line in fh:
                 line = line.strip()
@@ -27,6 +30,11 @@ class JsonlQADataset(Dataset):
                     continue
                 sample = QASample.model_validate_json(line)
                 self.samples.append(sample.model_dump(mode="json"))
+        elapsed = time.perf_counter() - started_at
+        print(
+            f"[dataset] loaded {len(self.samples)} samples from {self.path} in {elapsed:.2f}s",
+            flush=True,
+        )
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -65,6 +73,18 @@ class QwenSFTCollator:
         return normalized
 
     def _render_chat(self, messages: list[dict[str, Any]], *, add_generation_prompt: bool) -> str:
+        try:
+            return self.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=add_generation_prompt,
+                enable_thinking=self.enable_thinking,
+            )
+        except TypeError as exc:
+            raise RuntimeError(
+                "Current tokenizer.apply_chat_template does not accept enable_thinking. "
+                "Please verify the installed transformers version and the Qwen chat template."
+            ) from exc
         try:
             return self.tokenizer.apply_chat_template(
                 messages,
