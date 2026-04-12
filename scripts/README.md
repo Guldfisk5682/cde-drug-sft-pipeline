@@ -11,6 +11,10 @@ Current active entrypoints:
 - `split_qa_dataset.py`: split QA samples into train/test JSONL, preferring each sample's `split_hint`
 - `run_pipeline.py`: one-shot PDF -> fields -> cleaned records -> QA dataset -> split dataset
 - `train_qwen_dora.py`: Qwen3.5-4B DoRA training entrypoint for the finalized train/test JSONL
+- `build_benchmark_dataset.py`: convert held-out `test.jsonl` into a benchmark JSONL with gold labels / slots
+- `run_benchmark_generation.py`: run base-model or SFT-adapter generation on the benchmark
+- `evaluate_benchmark.py`: score predictions with classification accuracy plus slot-based recall / precision / hallucination
+- `compare_benchmark_runs.py`: compare two evaluation summaries, e.g. base model vs SFT model
 
 Support directory:
 
@@ -87,3 +91,43 @@ Current finalized dataset files:
 - `data/dataset/qa_dataset.jsonl`
 - `data/dataset/train.jsonl`
 - `data/dataset/test.jsonl`
+
+Benchmark workflow example:
+
+```bash
+python scripts/build_benchmark_dataset.py \
+  --input-path data/dataset/test.jsonl \
+  --output-path data/benchmark/benchmark.sample.jsonl \
+  --per-task-limit 20
+
+python scripts/run_benchmark_generation.py \
+  --benchmark-path data/benchmark/benchmark.sample.jsonl \
+  --output-path data/benchmark/base_predictions.jsonl \
+  --model-name-or-path Qwen/Qwen3.5-4B \
+  --load-in-8bit \
+  --device-map cuda:0
+
+python scripts/run_benchmark_generation.py \
+  --benchmark-path data/benchmark/benchmark.sample.jsonl \
+  --output-path data/benchmark/sft_predictions.jsonl \
+  --model-name-or-path Qwen/Qwen3.5-4B \
+  --adapter-path outputs/qwen3.5-4b-dora/final \
+  --load-in-8bit \
+  --device-map cuda:0
+
+python scripts/evaluate_benchmark.py \
+  --benchmark-path data/benchmark/benchmark.sample.jsonl \
+  --predictions-path data/benchmark/base_predictions.jsonl \
+  --results-path data/benchmark/base_eval.results.jsonl \
+  --summary-path data/benchmark/base_eval.summary.json
+
+python scripts/evaluate_benchmark.py \
+  --benchmark-path data/benchmark/benchmark.sample.jsonl \
+  --predictions-path data/benchmark/sft_predictions.jsonl \
+  --results-path data/benchmark/sft_eval.results.jsonl \
+  --summary-path data/benchmark/sft_eval.summary.json
+
+python scripts/compare_benchmark_runs.py \
+  --base-summary-path data/benchmark/base_eval.summary.json \
+  --sft-summary-path data/benchmark/sft_eval.summary.json
+```
