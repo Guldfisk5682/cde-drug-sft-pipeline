@@ -6,7 +6,6 @@ from pathlib import Path
 
 import torch
 import typer
-import yaml
 from peft import PeftModel
 from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
 
@@ -86,10 +85,25 @@ def main(
     dtype = choose_torch_dtype(torch_dtype)
     quantization_config = build_bnb_config(load_in_8bit, load_in_4bit, dtype)
     resolved_device_map = resolve_device_map(device_map)
+    print(
+        "[benchmark] config summary: "
+        f"model={model_name_or_path}, "
+        f"adapter={adapter_path}, "
+        f"dtype={dtype}, "
+        f"load_in_8bit={load_in_8bit}, "
+        f"load_in_4bit={load_in_4bit}, "
+        f"device_map={resolved_device_map}, "
+        f"max_new_tokens={max_new_tokens}, "
+        f"temperature={temperature}, "
+        f"top_p={top_p}, "
+        f"limit={limit}",
+        flush=True,
+    )
 
     print(f"[benchmark] loading processor from {model_name_or_path}", flush=True)
     processor = AutoProcessor.from_pretrained(model_name_or_path, trust_remote_code=True)
     tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
+    print("[benchmark] processor loaded", flush=True)
     print(f"[benchmark] loading model from {model_name_or_path}", flush=True)
     model = AutoModelForImageTextToText.from_pretrained(
         model_name_or_path,
@@ -98,10 +112,15 @@ def main(
         quantization_config=quantization_config,
         device_map=resolved_device_map,
     )
+    print("[benchmark] model loaded", flush=True)
 
     if adapter_path is not None:
         print(f"[benchmark] loading adapter from {adapter_path}", flush=True)
         model = PeftModel.from_pretrained(model, str(adapter_path))
+        print("[benchmark] adapter loaded", flush=True)
+
+    model.eval()
+    print("[benchmark] model set to eval()", flush=True)
 
     benchmark_samples = iter_benchmark_samples(benchmark_path)
     if limit is not None:
@@ -110,7 +129,14 @@ def main(
 
     predictions: list[BenchmarkPrediction] = []
     target_device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(f"[benchmark] target input device: {target_device}", flush=True)
+    print("[benchmark] start generation...", flush=True)
     for index, sample in enumerate(benchmark_samples, start=1):
+        print(
+            f"[benchmark] sample {index}/{len(benchmark_samples)} "
+            f"task={sample.task_type} question={sample.question}",
+            flush=True,
+        )
         prompt = build_prompt(tokenizer, sample.question, enable_thinking=enable_thinking)
         model_inputs = tokenizer(prompt, return_tensors="pt")
         model_inputs = {key: value.to(target_device) for key, value in model_inputs.items()}
@@ -136,8 +162,11 @@ def main(
                 task_type=sample.task_type,
             )
         )
-        if index % 20 == 0 or index == len(benchmark_samples):
-            print(f"[benchmark] generated {index}/{len(benchmark_samples)}", flush=True)
+        print(
+            f"[benchmark] finished sample {index}/{len(benchmark_samples)} "
+            f"prediction_chars={len(prediction_text)}",
+            flush=True,
+        )
 
     write_jsonl(output_path, predictions)
     typer.echo(f"Wrote {len(predictions)} benchmark predictions to {output_path}")
