@@ -15,6 +15,7 @@ Current active entrypoints:
 - `run_benchmark_generation.py`: run base-model or SFT-adapter generation on the benchmark
 - `evaluate_benchmark.py`: score predictions with classification accuracy plus slot-based recall / precision / hallucination
 - `compare_benchmark_runs.py`: compare two evaluation summaries, e.g. base model vs SFT model
+- `run_benchmark_workflow.py`: one-shot benchmark builder + base/SFT generation + evaluation + comparison
 
 Support directory:
 
@@ -101,18 +102,18 @@ python scripts/build_benchmark_dataset.py \
   --per-task-limit 20
 
 python scripts/run_benchmark_generation.py \
+  --config-path configs/train.yaml \
   --benchmark-path data/benchmark/benchmark.sample.jsonl \
   --output-path data/benchmark/base_predictions.jsonl \
   --model-name-or-path Qwen/Qwen3.5-4B \
-  --load-in-8bit \
   --device-map cuda:0
 
 python scripts/run_benchmark_generation.py \
+  --config-path configs/train.yaml \
   --benchmark-path data/benchmark/benchmark.sample.jsonl \
   --output-path data/benchmark/sft_predictions.jsonl \
   --model-name-or-path Qwen/Qwen3.5-4B \
   --adapter-path outputs/qwen3.5-4b-dora/final \
-  --load-in-8bit \
   --device-map cuda:0
 
 python scripts/evaluate_benchmark.py \
@@ -130,4 +131,20 @@ python scripts/evaluate_benchmark.py \
 python scripts/compare_benchmark_runs.py \
   --base-summary-path data/benchmark/base_eval.summary.json \
   --sft-summary-path data/benchmark/sft_eval.summary.json
+```
+
+The benchmark runner now supports batched generation. The initial default is
+`benchmark.batch_size: 4` in `configs/train.yaml`, chosen conservatively for a
+`Qwen3.5-4B` 8-bit model after observing roughly `5-6 GB` VRAM usage in single-sample inference.
+
+One-shot workflow example:
+
+```bash
+python scripts/run_benchmark_workflow.py \
+  --config-path configs/train.yaml \
+  --test-dataset-path data/dataset/test.jsonl \
+  --benchmark-dir data/benchmark/run01 \
+  --base-model-name-or-path Qwen/Qwen3.5-4B \
+  --sft-adapter-path outputs/qwen3.5-4b-dora/final \
+  --per-task-limit 20
 ```
