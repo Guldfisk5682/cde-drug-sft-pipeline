@@ -50,6 +50,8 @@ def main(
     sft_results_path = benchmark_dir / "sft_eval.results.jsonl"
     base_summary_path = benchmark_dir / "base_eval.summary.json"
     sft_summary_path = benchmark_dir / "sft_eval.summary.json"
+    comparison_json_path = benchmark_dir / "comparison.summary.json"
+    comparison_txt_path = benchmark_dir / "comparison.summary.txt"
 
     build_command = [
         sys.executable,
@@ -138,6 +140,10 @@ def main(
             str(base_summary_path),
             "--sft-summary-path",
             str(sft_summary_path),
+            "--output-json-path",
+            str(comparison_json_path),
+            "--output-txt-path",
+            str(comparison_txt_path),
         ],
     )
 
@@ -149,6 +155,8 @@ def main(
                 "sft_predictions_path": str(sft_predictions_path),
                 "base_summary_path": str(base_summary_path),
                 "sft_summary_path": str(sft_summary_path),
+                "comparison_json_path": str(comparison_json_path),
+                "comparison_txt_path": str(comparison_txt_path),
             },
             ensure_ascii=False,
             indent=2,

@@ -16,6 +16,7 @@ Current active entrypoints:
 - `evaluate_benchmark.py`: score predictions with classification accuracy plus slot-based recall / precision / hallucination
 - `compare_benchmark_runs.py`: compare two evaluation summaries, e.g. base model vs SFT model
 - `run_benchmark_workflow.py`: one-shot benchmark builder + base/SFT generation + evaluation + comparison
+- `run_infer.py`: one-off manual inference for quick qualitative inspection
 
 Support directory:
 
@@ -147,4 +148,26 @@ python scripts/run_benchmark_workflow.py \
   --base-model-name-or-path Qwen/Qwen3.5-4B \
   --sft-adapter-path outputs/qwen3.5-4b-dora/final \
   --per-task-limit 20
+```
+
+The workflow writes:
+
+- `benchmark.jsonl`
+- `base_predictions.jsonl`
+- `sft_predictions.jsonl`
+- `base_eval.results.jsonl`
+- `sft_eval.results.jsonl`
+- `base_eval.summary.json`
+- `sft_eval.summary.json`
+- `comparison.summary.json`
+- `comparison.summary.txt`
+
+Manual inference example:
+
+```bash
+python scripts/run_infer.py \
+  --config-path configs/train.yaml \
+  --model-name-or-path Qwen/Qwen3.5-4B \
+  --adapter-path outputs/qwen3.5-4b-dora/final \
+  --prompt "来那度胺胶囊是处方药还是非处方药？"
 ```

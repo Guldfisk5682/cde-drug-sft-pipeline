@@ -20,13 +20,7 @@ def metric_or_none(bucket: dict, metric: str) -> float | None:
     return None
 
 
-@app.command()
-def main(
-    base_summary_path: Path = typer.Option(..., exists=True, dir_okay=False, readable=True),
-    sft_summary_path: Path = typer.Option(..., exists=True, dir_okay=False, readable=True),
-) -> None:
-    base = load_json(base_summary_path)
-    sft = load_json(sft_summary_path)
+def build_comparison(base: dict, sft: dict) -> dict:
     metrics = (
         "classification_accuracy",
         "avg_recall",
@@ -34,33 +28,79 @@ def main(
         "avg_hallucination_rate",
         "exact_match_rate",
     )
+    comparison: dict[str, object] = {
+        "base_summary_path": base.get("predictions_path"),
+        "sft_summary_path": sft.get("predictions_path"),
+        "overall": {},
+        "by_task_type": {},
+    }
 
-    typer.echo("Overall:")
     for metric in metrics:
         base_value = metric_or_none(base.get("overall", {}), metric)
         sft_value = metric_or_none(sft.get("overall", {}), metric)
-        if base_value is None and sft_value is None:
-            continue
-        delta = None if base_value is None or sft_value is None else sft_value - base_value
-        typer.echo(
-            f"  {metric}: base={base_value} sft={sft_value} delta={delta}"
-        )
+        comparison["overall"][metric] = {
+            "base": base_value,
+            "sft": sft_value,
+            "delta": None if base_value is None or sft_value is None else sft_value - base_value,
+        }
 
     all_tasks = sorted(
         set(base.get("by_task_type", {}).keys()) | set(sft.get("by_task_type", {}).keys())
     )
-    typer.echo("\nBy task type:")
     for task in all_tasks:
-        typer.echo(f"  {task}:")
         base_bucket = base.get("by_task_type", {}).get(task, {})
         sft_bucket = sft.get("by_task_type", {}).get(task, {})
+        task_metrics: dict[str, dict[str, float | None]] = {}
         for metric in metrics:
             base_value = metric_or_none(base_bucket, metric)
             sft_value = metric_or_none(sft_bucket, metric)
-            if base_value is None and sft_value is None:
-                continue
-            delta = None if base_value is None or sft_value is None else sft_value - base_value
-            typer.echo(f"    {metric}: base={base_value} sft={sft_value} delta={delta}")
+            task_metrics[metric] = {
+                "base": base_value,
+                "sft": sft_value,
+                "delta": None if base_value is None or sft_value is None else sft_value - base_value,
+            }
+        comparison["by_task_type"][task] = task_metrics
+    return comparison
+
+
+def render_comparison_text(comparison: dict) -> str:
+    lines: list[str] = ["Overall:"]
+    for metric, payload in comparison.get("overall", {}).items():
+        lines.append(
+            f"  {metric}: base={payload['base']} sft={payload['sft']} delta={payload['delta']}"
+        )
+
+    lines.append("")
+    lines.append("By task type:")
+    for task, metrics in comparison.get("by_task_type", {}).items():
+        lines.append(f"  {task}:")
+        for metric, payload in metrics.items():
+            lines.append(
+                f"    {metric}: base={payload['base']} sft={payload['sft']} delta={payload['delta']}"
+            )
+    return "\n".join(lines)
+
+
+@app.command()
+def main(
+    base_summary_path: Path = typer.Option(..., exists=True, dir_okay=False, readable=True),
+    sft_summary_path: Path = typer.Option(..., exists=True, dir_okay=False, readable=True),
+    output_json_path: Path | None = typer.Option(None),
+    output_txt_path: Path | None = typer.Option(None),
+) -> None:
+    base = load_json(base_summary_path)
+    sft = load_json(sft_summary_path)
+    comparison = build_comparison(base, sft)
+    rendered = render_comparison_text(comparison)
+
+    if output_json_path is not None:
+        output_json_path.parent.mkdir(parents=True, exist_ok=True)
+        output_json_path.write_text(json.dumps(comparison, ensure_ascii=False, indent=2), encoding="utf-8")
+    if output_txt_path is not None:
+        output_txt_path.parent.mkdir(parents=True, exist_ok=True)
+        output_txt_path.write_text(rendered + "\n", encoding="utf-8")
+
+    typer.echo(rendered)
 
 
 if __name__ == "__main__":
