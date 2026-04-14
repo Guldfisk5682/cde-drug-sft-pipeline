@@ -84,7 +84,7 @@ def main(
         )
         results.append(
             BenchmarkSampleResult(
-                "benchmark_id": sample.benchmark_id,
+                benchmark_id=sample.benchmark_id,
                 task_type=sample.task_type,
                 answer_type=sample.answer_type,
                 question=sample.question,
