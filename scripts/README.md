@@ -17,6 +17,7 @@ Current active entrypoints:
 - `compare_benchmark_runs.py`: compare two evaluation summaries, e.g. base model vs SFT model
 - `run_benchmark_workflow.py`: one-shot benchmark builder + base/SFT generation + evaluation + comparison
 - `run_infer.py`: one-off manual inference for quick qualitative inspection
+- `run_llm_judge_evaluation.py`: DeepSeek-based semantic judge for recall / precision / hallucination on non-classification tasks
 
 Support directory:
 
@@ -170,4 +171,18 @@ python scripts/run_infer.py \
   --model-name-or-path Qwen/Qwen3.5-4B \
   --adapter-path outputs/qwen3.5-4b-dora/final \
   --prompt "来那度胺胶囊是处方药还是非处方药？"
+```
+
+LLM judge example:
+
+```bash
+cp .env.example .env
+# fill DEEPSEEK_API_KEY in .env first
+
+python scripts/run_llm_judge_evaluation.py \
+  --benchmark-path data/benchmark/run01/benchmark.jsonl \
+  --predictions-path data/benchmark/run01/sft_predictions.jsonl \
+  --results-path data/benchmark/run01/sft_llm_judge.results.jsonl \
+  --summary-path data/benchmark/run01/sft_llm_judge.summary.json \
+  --judge-model deepseek-chat
 ```
