@@ -8,6 +8,7 @@ from pathlib import Path
 import typer
 
 from _bootstrap import PROJECT_ROOT
+from leaflet_pipeline.benchmark_schema import BenchmarkSampleResult
 from leaflet_pipeline.benchmarking import (
     evaluate_prediction,
     iter_benchmark_predictions,
@@ -38,7 +39,7 @@ def main(
     summary_path: Path = typer.Option(DEFAULT_SUMMARY_PATH),
     env_path: Path = typer.Option(DEFAULT_ENV_PATH, dir_okay=False),
     judge_model: str = typer.Option("deepseek-chat"),
-    base_url: str = typer.Option("https://api.deepseek.com"),
+    base_url: str | None = typer.Option(None),
     limit: int | None = typer.Option(None, min=1),
 ) -> None:
     load_dotenv(env_path)
@@ -46,6 +47,8 @@ def main(
     if not api_key:
         typer.echo("Missing DEEPSEEK_API_KEY in environment or .env file.", err=True)
         raise typer.Exit(code=1)
+    if base_url is None:
+        base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
     benchmark_samples = iter_benchmark_samples(benchmark_path)
     predictions = iter_benchmark_predictions(predictions_path)
@@ -56,13 +59,13 @@ def main(
     if limit is not None:
         benchmark_ids = benchmark_ids[:limit]
 
-    results: list[dict] = []
+    results: list[BenchmarkSampleResult] = []
     for index, benchmark_id in enumerate(benchmark_ids, start=1):
         sample = sample_by_id[benchmark_id]
         prediction = prediction_by_id[benchmark_id]
         if sample.answer_type == "classification":
-            result = evaluate_prediction(sample, prediction.prediction).model_dump(mode="json")
-            result["judge_mode"] = "rule"
+            result = evaluate_prediction(sample, prediction.prediction)
+            result.predicted_slots = {"judge_mode": ["rule"]}
             results.append(result)
             continue
 
@@ -80,28 +83,26 @@ def main(
             base_url=base_url,
         )
         results.append(
-            {
+            BenchmarkSampleResult(
                 "benchmark_id": sample.benchmark_id,
-                "task_type": sample.task_type,
-                "answer_type": sample.answer_type,
-                "question": sample.question,
-                "reference_answer": sample.reference_answer,
-                "prediction": prediction.prediction,
-                "gold_label": sample.gold_label,
-                "predicted_label": None,
-                "label_correct": None,
-                "gold_slots": sample.gold_slots,
-                "predicted_slots": {},
-                "matched_values": judgment.get("matched_points", []),
-                "missing_values": judgment.get("missing_points", []),
-                "hallucinated_values": judgment.get("hallucinated_points", []),
-                "recall": float(judgment.get("recall_score", 0.0)),
-                "precision": float(judgment.get("precision_score", 0.0)),
-                "hallucination_rate": float(judgment.get("hallucination_score", 0.0)),
-                "exact_match": False,
-                "judge_mode": "llm",
-                "judge_reason": judgment.get("reason", ""),
-            }
+                task_type=sample.task_type,
+                answer_type=sample.answer_type,
+                question=sample.question,
+                reference_answer=sample.reference_answer,
+                prediction=prediction.prediction,
+                gold_label=sample.gold_label,
+                predicted_label=None,
+                label_correct=None,
+                gold_slots=sample.gold_slots,
+                predicted_slots={"judge_mode": ["llm"], "judge_reason": [judgment.get("reason", "")]},
+                matched_values=judgment.get("matched_points", []),
+                missing_values=judgment.get("missing_points", []),
+                hallucinated_values=judgment.get("hallucinated_points", []),
+                recall=float(judgment.get("recall_score", 0.0)),
+                precision=float(judgment.get("precision_score", 0.0)),
+                hallucination_rate=float(judgment.get("hallucination_score", 0.0)),
+                exact_match=False,
+            )
         )
 
     summary = summarize_results(results)

@@ -31,7 +31,7 @@ logging_steps: 10
 save_steps: 200
 eval_steps: 200
 save_total_limit: 2
-dataloader_num_workers: 2
+dataloader_num_workers: 8
 report_to: none
 benchmark:
   torch_dtype: float16
@@ -39,7 +39,7 @@ benchmark:
   load_in_8bit: true
   load_in_4bit: false
   enable_thinking: false
-  max_new_tokens: 128
+  max_new_tokens: 512
   temperature: 0.0
   top_p: 1.0
-  batch_size: 4
+  batch_size: 64

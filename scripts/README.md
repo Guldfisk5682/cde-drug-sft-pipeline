@@ -18,6 +18,7 @@ Current active entrypoints:
 - `run_benchmark_workflow.py`: one-shot benchmark builder + base/SFT generation + evaluation + comparison
 - `run_infer.py`: one-off manual inference for quick qualitative inspection
 - `run_llm_judge_evaluation.py`: DeepSeek-based semantic judge for recall / precision / hallucination on non-classification tasks
+- `run_llm_judge_workflow.py`: one-shot base/SFT LLM-judge evaluation + comparison
 
 Support directory:
 
@@ -184,5 +185,14 @@ python scripts/run_llm_judge_evaluation.py \
   --predictions-path data/benchmark/run01/sft_predictions.jsonl \
   --results-path data/benchmark/run01/sft_llm_judge.results.jsonl \
   --summary-path data/benchmark/run01/sft_llm_judge.summary.json \
+  --judge-model deepseek-chat
+```
+
+Full-run LLM judge comparison:
+
+```bash
+python scripts/run_llm_judge_workflow.py \
+  --benchmark-dir data/benchmark/full_run \
+  --env-path .env \
   --judge-model deepseek-chat
 ```
